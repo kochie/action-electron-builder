@@ -89,6 +89,7 @@ const runAction = () => {
 	const pkgRoot = getInput("package_root", true);
 	const buildScriptName = getInput("build_script_name", true);
 	const skipBuild = getInput("skip_build") === "true";
+	const skipInstall = getInput("skip_install") === "true";
 	const useVueCli = getInput("use_vue_cli") === "true";
 	const args = getInput("args") || "";
 	const maxAttempts = Number(getInput("max_attempts") || "1");
@@ -126,16 +127,20 @@ const runAction = () => {
 	// Disable console advertisements during install phase
 	setEnv("ADBLOCK", true);
 
-	log(`Installing dependencies using ${packageManager}`);
-	// run(useNpm ? "npm install" : "yarn", pkgRoot);
-	if (packageManager === "pnpm") {
-		run(`pnpm install --frozen-lockfile`, pkgRoot);
-	} else if (packageManager === "yarn") {
-		run(`yarn install --frozen-lockfile`, pkgRoot);
-	} else if (packageManager === "npm") {
-		run(`npm install`, pkgRoot);
+	if (skipInstall) {
+		log("Skipping dependency installation because `skip_install` option is set");
 	} else {
-		exit(`Unsupported package manager: ${packageManager}`);
+		log(`Installing dependencies using ${packageManager}`);
+		// run(useNpm ? "npm install" : "yarn", pkgRoot);
+		if (packageManager === "pnpm") {
+			run(`pnpm install --frozen-lockfile`, pkgRoot);
+		} else if (packageManager === "yarn") {
+			run(`yarn install --frozen-lockfile`, pkgRoot);
+		} else if (packageManager === "npm") {
+			run(`npm install`, pkgRoot);
+		} else {
+			exit(`Unsupported package manager: ${packageManager}`);
+		}
 	}
 
 	// Run NPM build script if it exists
@@ -143,26 +148,31 @@ const runAction = () => {
 		log("Skipping build script because `skip_build` option is set");
 	} else {
 		log("Running the build script…");
-		if (useNpm) {
-			run(`npm run ${buildScriptName} --if-present`, pkgRoot);
-		} else {
-			// TODO: Use `yarn run ${buildScriptName} --if-present` once supported
-			// https://github.com/yarnpkg/yarn/issues/6894
-			const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
-			if (pkgJson.scripts && pkgJson.scripts[buildScriptName]) {
-				run(`yarn run ${buildScriptName}`, pkgRoot);
-			}
+		if (buildScriptName) {
+			run(`${packageManager} run ${buildScriptName}`, pkgRoot);
 		}
 	}
 
 	log(`Building${release ? " and releasing" : ""} the Electron app…`);
 	const cmd = useVueCli ? "vue-cli-service electron:build" : "electron-builder";
+
+	let buildCmd = ''
+	if (packageManager === "pnpm") {
+		buildCmd = `pnpm exec ${cmd}`
+	} else if (packageManager === "yarn") {
+		buildCmd = `yarn ${cmd}`
+	} else if (packageManager === "npm") {
+		buildCmd = `npx --no-install ${cmd}`
+	}
+
+	buildCmd += ` --${platform} ${release ? "--publish always" : ""} ${(platform == "mac") ? "--arm64 --x64" : ""} ${args}`
+
+
+
 	for (let i = 0; i < maxAttempts; i += 1) {
 		try {
 			run(
-				`${useNpm ? "npx --no-install" : "yarn run"} ${cmd} --${platform} ${
-					release ? "--publish always" : ""
-				} ${(platform == "mac") ? "--arm64 --x64" : ""}	${args}`,
+				buildCmd,
 				appRoot,
 			);
 			break;

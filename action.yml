@@ -50,6 +50,10 @@ inputs:
     description: Package manager to use for installing dependencies
     required: false
     default: "npm"
+  skip_install:
+    description: Whether the action should skip installing dependencies
+    required: false
+    default: true
 
   # Deprecated
   app_root:
