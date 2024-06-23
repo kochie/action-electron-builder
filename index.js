@@ -61,6 +61,26 @@ const getInput = (name, required) => {
 };
 
 /**
+ * Returns the default package manager to use based on the presence of `yarn.lock` or `pnpm-lock.yaml`
+ * 
+ * @returns {string} The default package manager to use
+ * 
+ * @example
+ * const packageManager = getDefaultPackageManager();
+ * console.log(`Will run ${packageManager} commands`);
+ * 
+ */
+const getDefaultPackageManager = () => {
+	if (existsSync(join(process.cwd(), "yarn.lock"))) {
+		return "yarn";
+	} else if (existsSync(join(process.cwd(), "pnpm-lock.yaml"))) {
+		return "pnpm";
+	} else {
+		return "npm";
+	}
+}
+
+/**
  * Installs NPM dependencies and builds/releases the Electron app
  */
 const runAction = () => {
@@ -72,17 +92,18 @@ const runAction = () => {
 	const useVueCli = getInput("use_vue_cli") === "true";
 	const args = getInput("args") || "";
 	const maxAttempts = Number(getInput("max_attempts") || "1");
+	const packageManager = getInput("package_manager") || getDefaultPackageManager();
 
 	// TODO: Deprecated option, remove in v2.0. `electron-builder` always requires a `package.json` in
 	// the same directory as the Electron app, so the `package_root` option should be used instead
 	const appRoot = getInput("app_root") || pkgRoot;
 
 	const pkgJsonPath = join(pkgRoot, "package.json");
-	const pkgLockPath = join(pkgRoot, "package-lock.json");
+	// const pkgLockPath = join(pkgRoot, "package-lock.json");
 
 	// Determine whether NPM should be used to run commands (instead of Yarn, which is the default)
-	const useNpm = existsSync(pkgLockPath);
-	log(`Will run ${useNpm ? "NPM" : "Yarn"} commands in directory "${pkgRoot}"`);
+	// const useNpm = existsSync(pkgLockPath);
+	log(`Will run ${packageManager} commands in directory "${pkgRoot}"`);
 
 	// Make sure `package.json` file exists
 	if (!existsSync(pkgJsonPath)) {
@@ -105,8 +126,17 @@ const runAction = () => {
 	// Disable console advertisements during install phase
 	setEnv("ADBLOCK", true);
 
-	log(`Installing dependencies using ${useNpm ? "NPM" : "Yarn"}…`);
-	run(useNpm ? "npm install" : "yarn", pkgRoot);
+	log(`Installing dependencies using ${packageManager}`);
+	// run(useNpm ? "npm install" : "yarn", pkgRoot);
+	if (packageManager === "pnpm") {
+		run(`pnpm install --frozen-lockfile`, pkgRoot);
+	} else if (packageManager === "yarn") {
+		run(`yarn install --frozen-lockfile`, pkgRoot);
+	} else if (packageManager === "npm") {
+		run(`npm install`, pkgRoot);
+	} else {
+		exit(`Unsupported package manager: ${packageManager}`);
+	}
 
 	// Run NPM build script if it exists
 	if (skipBuild) {
