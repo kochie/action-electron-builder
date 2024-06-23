@@ -46,6 +46,10 @@ inputs:
     description: Maximum number of attempts for completing the build and release step
     required: false
     default: "1"
+  package_manager:
+    description: Package manager to use for installing dependencies
+    required: false
+    default: "npm"
 
   # Deprecated
   app_root:
